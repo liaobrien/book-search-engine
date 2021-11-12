@@ -1,5 +1,5 @@
 const { AuthenticationError } = require('apollo-server-express');
-const { User, Book } = require('../models');
+const { User } = require('../models');
 const { signToken } = require('../utils/auth');
 
 // Define the query and mutation functionality to work with the Mongoose models.
@@ -7,57 +7,75 @@ const { signToken } = require('../utils/auth');
 
 const resolvers = {
       Query: {
-            users: async () => {
-                  return User.find({}).populate('books');
-            },
-            user: async (parent, { username }) => {
-                  return User.findOne({ username }).populate('books');
-            },
-            book: async () => {
-                  return Book.findOne({});
-            },
-            books: async () => {
-                  return Book.find({});
-            },
-            login: async (parent, { email, password }) => {
+            me: async (parent, args, context) => {
+                  if (context.user) {
+                        const userData = await User.findOne({
+                              id: context.user._id
+                        })
 
+                        return userData;
+                  }
+            }
+      },
+
+      Mutation: {
+            addUser: async (parent, { username, email, password }) => {
+
+                  const user = await User.create({ username, email, password });
+
+                  const token = signToken(user);
+
+                  return { token, user };
+            },
+
+            login: async (parent, { email, password }) => {
                   const user = await User.findOne({ email });
 
                   if (!user) {
-                        throw new AuthenticationError('No user found with this email address');
+                        throw new AuthenticationError("Not logged in.");
                   }
 
                   const correctPw = await user.isCorrectPassword(password);
 
                   if (!correctPw) {
-                        throw new AuthenticationError('Incorrect credentials');
+                        throw new AuthenticationError("Incorrect password.");
                   }
 
                   const token = signToken(user);
 
                   return { token, user };
             },
-      },
 
-      Mutation: {
-            createUser: async (parent, { username, email, password }) => {
-                  // First we create the user
-                  const user = await User.create({ username, email, password });
-                  // To reduce friction for the user, we immediately sign a JSON Web Token and log the user in after they are created
-                  const token = signToken(user);
-                  // Return an `Auth` object that consists of the signed token and user's information
-                  return { token, user };
+            saveBook: async (parent, { bookData }, context) => {
+                  if (context.user) {
+                        const updatedUser = await User.findOneAndUpdate(
+                              { _id: context.user._id },
+                              { $push: { savedBooks: bookData } },
+                              { new: true, runValidators: true }
+                        );
+
+                        return updatedUser;
+                  }
+
+                  throw new AuthenticationError("Not signed in!");
+
             },
 
-            // ?????
-            saveBook: async (parent,) => {
-                  const updatedUser = await User.findOneAndUpdate(
-                        { _id: user._id },
-                        { $addToSet: { savedBooks: body } },
-                        { new: true, runValidators: true }
-                  );
+            removeBook: async (parent, { bookId }, context) => {
+                  if (context.user) {
+                        const updatedUser = await User.findOneAndUpdate(
+                              { _id: context.user._id },
+                              { $pull: { savedBooks: { bookId } } },
+                              { new: true }
+                        );
 
-                  return updatedUser;
-            },
+                        return updatedUser;
+                  }
+
+                  throw new AuthenticationError("Not signed in!");
+            }
+
       }
 }
+
+module.exports = resolvers;
