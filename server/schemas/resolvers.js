@@ -1,5 +1,5 @@
 const { AuthenticationError } = require('apollo-server-express');
-const { User, Thought } = require('../models');
+const { User, Book } = require('../models');
 const { signToken } = require('../utils/auth');
 
 // Define the query and mutation functionality to work with the Mongoose models.
@@ -49,8 +49,15 @@ const resolvers = {
                   return { token, user };
             },
 
+            // ?????
             saveBook: async (parent,) => {
+                  const updatedUser = await User.findOneAndUpdate(
+                        { _id: user._id },
+                        { $addToSet: { savedBooks: body } },
+                        { new: true, runValidators: true }
+                  );
 
+                  return updatedUser;
             },
       }
 }
